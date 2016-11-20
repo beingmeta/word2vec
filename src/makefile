@@ -3,11 +3,11 @@ BIN_DIR=../bin
 
 CC = gcc
 #The -Ofast might not work with older versions of gcc; in that case, use -O2
-CFLAGS = -lm -pthread -O2 -Wall -funroll-loops -Wno-unused-result
+CFLAGS = -lm -pthread $(DEBUG) -O2 -Wall -funroll-loops -Wno-unused-result
 
 all: word2vec word2phrase distance word-analogy compute-accuracy scripts
 
-%: %.c
+%: %.c makefile
 	$(CC) $< -o $@ $(CFLAGS)
 	cp $@ ${BIN_DIR}/$@
 scripts:
