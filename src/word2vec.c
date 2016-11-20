@@ -24,9 +24,9 @@
 #define MAX_SENTENCE_LENGTH 1000
 #define MAX_CODE_LENGTH 40
 
-const int vocab_hash_size = 30000000;  // Maximum 30 * 0.7 = 21M words in the vocabulary
+int vocab_hash_size = 30000000;  // Maximum 30 * 0.7 = 21M words in the vocabulary
 
-typedef float real;                    // Precision of float numbers
+typedef float real; // Precision of float numbers
 
 struct vocab_word {
   long long cn;
@@ -37,7 +37,8 @@ struct vocab_word {
 char train_file[MAX_STRING], output_file[MAX_STRING];
 char save_vocab_file[MAX_STRING], read_vocab_file[MAX_STRING];
 struct vocab_word *vocab;
-int binary = 0, cbow = 0, debug_mode = 2, window = 5, min_count = 5, num_threads = 1, min_reduce = 1;
+int cbow = 0, window = 5, min_count = 5, min_reduce = 1;
+int binary = 0, debug_mode = 2, num_threads = 1;
 int *vocab_hash;
 long long vocab_max_size = 1000, vocab_size = 0, layer1_size = 100;
 long long train_words = 0, word_count_actual = 0, file_size = 0, classes = 0;
@@ -728,8 +729,16 @@ int main(int argc, char **argv) {
   if ((i = ArgPos((char *)"-threads", argc, argv)) > 0) num_threads = atoi(argv[i + 1]);
   if ((i = ArgPos((char *)"-min-count", argc, argv)) > 0) min_count = atoi(argv[i + 1]);
   if ((i = ArgPos((char *)"-classes", argc, argv)) > 0) classes = atoi(argv[i + 1]);
+  if ((i = ArgPos((char *)"-vocab-max", argc, argv)) > 0) vocab_max_size = atof(argv[i + 1]);
+  if ((i = ArgPos((char *)"-vocab-hash", argc, argv)) > 0) vocab_hash_size = atof(argv[i + 1]);
   vocab = (struct vocab_word *)calloc(vocab_max_size, sizeof(struct vocab_word));
+  if (vocab==NULL) {
+    perror("Couldn't allocate vocabulary table");
+    exit(EXIT_FAILURE);}
   vocab_hash = (int *)calloc(vocab_hash_size, sizeof(int));
+  if (vocab_hash==NULL) {
+    perror("Couldn't allocate vocabulary hash table");
+    exit(EXIT_FAILURE);}
   expTable = (real *)malloc((EXP_TABLE_SIZE + 1) * sizeof(real));
   if (expTable == NULL) {
     fprintf(stderr, "out of memory\n");
