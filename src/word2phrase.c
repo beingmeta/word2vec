@@ -20,7 +20,7 @@
 
 #define MAX_STRING 60
 
-const int vocab_hash_size = 500000000; // Maximum 500M entries in the vocabulary
+int vocab_hash_size = 5000000; // Maximum 5M entries in the hash table
 
 typedef float real;                    // Precision of float numbers
 
@@ -272,8 +272,12 @@ int main(int argc, char **argv) {
     printf("\t\tUse <file> to save the resulting word vectors / word clusters / phrases\n");
     printf("\t-min-count <int>\n");
     printf("\t\tThis will discard words that appear less than <int> times; default is 5\n");
+    printf("\t-vocab-size <int>\n");
+    printf("\t\tThis is the initial size of the vocabulary; default is 10,000\n");
     printf("\t-threshold <float>\n");
-    printf("\t\t The <float> value represents threshold for forming the phrases (higher means less phrases); default 100\n");
+    printf("\t-vocab-hash <int>\n");
+    printf("\t\tThis is the size of the vocabulary hash table; default is vocab-size*5\n");
+    printf("\t\t The <float> value represents threshold for forming the phrases (higher means fewer phrases); default 100\n");
     printf("\t-debug <int>\n");
     printf("\t\tSet the debug mode (default = 2 = more info during training)\n");
     printf("\nExamples:\n");
@@ -285,8 +289,18 @@ int main(int argc, char **argv) {
   if ((i = ArgPos((char *)"-output", argc, argv)) > 0) strcpy(output_file, argv[i + 1]);
   if ((i = ArgPos((char *)"-min-count", argc, argv)) > 0) min_count = atoi(argv[i + 1]);
   if ((i = ArgPos((char *)"-threshold", argc, argv)) > 0) threshold = atof(argv[i + 1]);
+  if ((i = ArgPos((char *)"-vocab-size", argc, argv)) > 0) vocab_max_size = atof(argv[i + 1]);
+  if ((i = ArgPos((char *)"-vocab-hash", argc, argv)) > 0)
+    vocab_hash_size = atof(argv[i + 1]);
+  else vocab_hash_size = vocab_max_size*5;
   vocab = (struct vocab_word *)calloc(vocab_max_size, sizeof(struct vocab_word));
+  if (vocab==NULL) {
+    perror("Couldn't allocate vocabulary table");
+    exit(EXIT_FAILURE);}
   vocab_hash = (int *)calloc(vocab_hash_size, sizeof(int));
+  if (vocab_hash==NULL) {
+    perror("Couldn't allocate vocabulary hash table");
+    exit(EXIT_FAILURE);}
   TrainModel();
   return 0;
 }
