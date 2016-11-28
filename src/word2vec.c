@@ -413,9 +413,11 @@ void *TrainModelThread(void *id) {
       last_word_count = word_count;
       if ((debug_mode > 1)) {
         now=clock();
-        printf("%cAlpha: %f  Progress: %.2f%%  Words/thread/sec: %.2fk  ", 13, alpha,
-         word_count_actual / (real)(train_words + 1) * 100,
-         word_count_actual / ((real)(now - start + 1) / (real)CLOCKS_PER_SEC * 1000));
+        printf("%cAlpha: %f  Progress: %.2f%%  Words/thread/sec: %.2fk  ",
+	       13, alpha,
+	       word_count_actual / (real)(train_words + 1) * 100,
+	       (word_count_actual / 
+		((real)(now - start + 1) / (real)CLOCKS_PER_SEC * 1000)));
         fflush(stdout);
       }
       alpha = starting_alpha * (1 - word_count_actual / (real)(train_words + 1));
@@ -565,7 +567,8 @@ void *TrainModelThread(void *id) {
   pthread_exit(NULL);
 }
 
-void TrainModel() {
+void TrainModel() 
+{
   long a, b, c, d;
   FILE *fo;
   pthread_t *pt = (pthread_t *)malloc(num_threads * sizeof(pthread_t));
@@ -573,16 +576,25 @@ void TrainModel() {
     fprintf(stderr, "cannot allocate memory for threads\n");
     exit(1);
   }
-  printf("Starting training using file %s\n", train_file);
   starting_alpha = alpha;
-  if (read_vocab_file[0] != 0) ReadVocab(); else LearnVocabFromTrainFile();
-  if (save_vocab_file[0] != 0) SaveVocab();
+  if (read_vocab_file[0] != 0) {
+    printf("Starting training using file %s with vocab %s\n", 
+	   train_file,read_vocab_file);
+    ReadVocab();}
+  else {
+    printf("Starting training using file %s\n", train_file);
+    LearnVocabFromTrainFile();}
+  if (save_vocab_file[0] != 0) {
+    printf("Saving vocabulary to %s\n", save_vocab_file);
+    SaveVocab();}
   if (output_file[0] == 0) return;
   InitNet();
   if (negative > 0) InitUnigramTable();
   start = clock();
+  printf("Starting training using using %d threads\n", num_threads);
   for (a = 0; a < num_threads; a++) pthread_create(&pt[a], NULL, TrainModelThread, (void *)a);
   for (a = 0; a < num_threads; a++) pthread_join(pt[a], NULL);
+  printf("\nDone with training\n");
   fo = fopen(output_file, "wb");
   if (fo == NULL) {
     fprintf(stderr, "Cannot open %s: permission denied\n", output_file);
@@ -590,6 +602,7 @@ void TrainModel() {
   }
   if (classes == 0) {
     // Save the word vectors
+    printf("Saving word vectors\n");
     fprintf(fo, "%lld %lld\n", vocab_size, layer1_size);
     for (a = 0; a < vocab_size; a++) {
       if (vocab[a].word != NULL) {
@@ -607,6 +620,7 @@ void TrainModel() {
       fprintf(stderr, "cannot allocate memory for centcn\n");
       exit(1);
     }
+    else printf("Generating %d classes\n",clcn);
     int *cl = (int *)calloc(vocab_size, sizeof(int));
     real closev, x;
     real *cent = (real *)calloc(classes * layer1_size, sizeof(real));
