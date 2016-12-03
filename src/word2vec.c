@@ -24,6 +24,10 @@
 #define MAX_SENTENCE_LENGTH 1000
 #define MAX_CODE_LENGTH 40
 
+#ifndef NUM_THREADS
+#define NUM_THREADS 2
+#endif
+
 int vocab_hash_size = 30000000;  // Maximum 30 * 0.7 = 21M words in the vocabulary
 
 typedef float real; // Precision of float numbers
@@ -38,7 +42,7 @@ char train_file[MAX_STRING], output_file[MAX_STRING];
 char save_vocab_file[MAX_STRING], read_vocab_file[MAX_STRING];
 struct vocab_word *vocab;
 int cbow = 0, window = 5, min_count = 5, min_reduce = 1;
-int binary = 0, debug_mode = 2, num_threads = 1;
+int binary = 0, debug_mode = 2, num_threads = NUM_THREADS;
 int *vocab_hash;
 long long vocab_max_size = 1000, vocab_size = 0, layer1_size = 100;
 long long train_words = 0, word_count_actual = 0, file_size = 0, classes = 0;
@@ -409,6 +413,9 @@ void *TrainModelThread(void *id) {
   fseek(fi, file_size / (long long)num_threads * (long long)id, SEEK_SET);
   while (1) {
     if (word_count - last_word_count > 10000) {
+      /* Update the progress indicator every 10,000 words. */
+      /* Note that updating word_count_actual in this way isn't actually 
+	 threadsafe, but there probably won't be multiple threads colliding. */
       word_count_actual += word_count - last_word_count;
       last_word_count = word_count;
       if ((debug_mode > 1)) {
@@ -423,6 +430,7 @@ void *TrainModelThread(void *id) {
       alpha = starting_alpha * (1 - word_count_actual / (real)(train_words + 1));
       if (alpha < starting_alpha * 0.0001) alpha = starting_alpha * 0.0001;
     }
+    /* Read a sentence if you don't have one. */
     if (sentence_length == 0) {
       while (1) {
         word = ReadWordIndex(fi);
@@ -442,7 +450,10 @@ void *TrainModelThread(void *id) {
       }
       sentence_position = 0;
     }
+    /* If you got to the end of the file while reading the sentence, break.
+       This consistently discards the words at the end, which seems like a bug. */
     if (feof(fi)) break;
+    /* This is how you tell if you're done */
     if (word_count > train_words / num_threads) break;
     word = sen[sentence_position];
     if (word == -1) continue;
@@ -458,7 +469,9 @@ void *TrainModelThread(void *id) {
         if (c >= sentence_length) continue;
         last_word = sen[c];
         if (last_word == -1) continue;
-        for (c = 0; c < layer1_size; c++) neu1[c] += syn0[c + last_word * layer1_size];
+        for (c = 0; c < layer1_size; c++) {
+	  /* Populate neu1 with the weights for the last word */
+	  neu1[c] += syn0[c + last_word * layer1_size];}
       }
       if (hs) for (d = 0; d < vocab[word].codelen; d++) {
         f = 0;
@@ -503,7 +516,8 @@ void *TrainModelThread(void *id) {
         if (c >= sentence_length) continue;
         last_word = sen[c];
         if (last_word == -1) continue;
-        for (c = 0; c < layer1_size; c++) syn0[c + last_word * layer1_size] += neu1e[c];
+        for (c = 0; c < layer1_size; c++) {
+	  syn0[c + last_word * layer1_size] += neu1e[c];}
       }
     } else {  //train skip-gram
       for (a = b; a < window * 2 + 1 - b; a++) if (a != window) {
@@ -519,16 +533,19 @@ void *TrainModelThread(void *id) {
           f = 0;
           l2 = vocab[word].point[d] * layer1_size;
           // Propagate hidden -> output
-          for (c = 0; c < layer1_size; c++) f += syn0[c + l1] * syn1[c + l2];
+          for (c = 0; c < layer1_size; c++) {
+	    f += syn0[c + l1] * syn1[c + l2];}
           if (f <= -MAX_EXP) continue;
           else if (f >= MAX_EXP) continue;
           else f = expTable[(int)((f + MAX_EXP) * (EXP_TABLE_SIZE / MAX_EXP / 2))];
           // 'g' is the gradient multiplied by the learning rate
           g = (1 - vocab[word].code[d] - f) * alpha;
           // Propagate errors output -> hidden
-          for (c = 0; c < layer1_size; c++) neu1e[c] += g * syn1[c + l2];
+          for (c = 0; c < layer1_size; c++) {
+	    neu1e[c] += g * syn1[c + l2];}
           // Learn weights hidden -> output
-          for (c = 0; c < layer1_size; c++) syn1[c + l2] += g * syn0[c + l1];
+          for (c = 0; c < layer1_size; c++) {
+	    syn1[c + l2] += g * syn0[c + l1];}
         }
         // NEGATIVE SAMPLING
         if (negative > 0) for (d = 0; d < negative + 1; d++) {
@@ -544,16 +561,20 @@ void *TrainModelThread(void *id) {
           }
           l2 = target * layer1_size;
           f = 0;
-          for (c = 0; c < layer1_size; c++) f += syn0[c + l1] * syn1neg[c + l2];
+          for (c = 0; c < layer1_size; c++) {
+	    f += syn0[c + l1] * syn1neg[c + l2];}
           if (f > MAX_EXP) g = (label - 1) * alpha;
           else if (f < -MAX_EXP) g = (label - 0) * alpha;
           else g = (label - expTable[(int)((f + MAX_EXP) * (EXP_TABLE_SIZE / MAX_EXP / 2))]) * alpha;
-          for (c = 0; c < layer1_size; c++) neu1e[c] += g * syn1neg[c + l2];
-          for (c = 0; c < layer1_size; c++) syn1neg[c + l2] += g * syn0[c + l1];
+          for (c = 0; c < layer1_size; c++) {
+	    neu1e[c] += g * syn1neg[c + l2];}
+          for (c = 0; c < layer1_size; c++) {
+	    syn1neg[c + l2] += g * syn0[c + l1];}
         }
         // Learn weights input -> hidden
-        for (c = 0; c < layer1_size; c++) syn0[c + l1] += neu1e[c];
-      }
+        for (c = 0; c < layer1_size; c++) {
+	  syn0[c + l1] += neu1e[c];}
+	}
     }
     sentence_position++;
     if (sentence_position >= sentence_length) {
